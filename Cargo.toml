@@ -1,5 +1,5 @@
 [package]
-name = "merkle-whitelist"
+name = "merkle-builder"
 version = "0.1.0"
 edition = "2021"
 description = "Merkle tree and proof generator for EVM whitelists and airdrops, with a CLI and a web interface"

@@ -1,4 +1,4 @@
-# Merkle Whitelist
+# Merkle Builder
 
 A fast Merkle tree and proof generator for EVM whitelists and airdrops, written in Rust.
 It ships as a single binary with a **command-line interface** and a **web interface**, and runs in Docker.
@@ -41,11 +41,11 @@ Then open <http://localhost:8080>.
 ### Docker (CLI)
 
 ```bash
-docker build -t merkle-whitelist .
+docker build -t merkle-builder .
 ```
 
 ```bash
-docker run --rm -i merkle-whitelist generate --mode address < examples/addresses.txt > output.json
+docker run --rm -i merkle-builder generate --mode address < examples/addresses.txt > output.json
 ```
 
 ### From source
@@ -57,7 +57,7 @@ cargo install --path .
 ```
 
 ```bash
-merkle-whitelist generate examples/addresses.txt -o output.json
+merkle-builder generate examples/addresses.txt -o output.json
 ```
 
 ## Web interface
@@ -65,7 +65,7 @@ merkle-whitelist generate examples/addresses.txt -o output.json
 Start the server with Docker Compose (see above) or directly:
 
 ```bash
-merkle-whitelist serve
+merkle-builder serve
 ```
 
 By default it listens on `http://127.0.0.1:8080` (the Docker image listens on `0.0.0.0:8080`).
@@ -86,7 +86,7 @@ Invalid lines are reported with their line numbers, so nothing is silently skipp
 ## Command-line interface
 
 ```text
-merkle-whitelist <COMMAND>
+merkle-builder <COMMAND>
 
 Commands:
   generate  Generate the Merkle root and a proof for every entry of a list
@@ -94,12 +94,12 @@ Commands:
   serve     Start the web interface
 ```
 
-Run `merkle-whitelist <COMMAND> --help` for the full list of options.
+Run `merkle-builder <COMMAND> --help` for the full list of options.
 
 ### `generate`
 
 ```text
-merkle-whitelist generate [OPTIONS] [INPUT]
+merkle-builder generate [OPTIONS] [INPUT]
 ```
 
 | Option | Default | Description |
@@ -118,16 +118,16 @@ Examples:
 
 ```bash
 # Address list
-merkle-whitelist generate examples/addresses.txt -o whitelist.json
+merkle-builder generate examples/addresses.txt -o whitelist.json
 
 # Address + amount list, amounts given in raw units (wei)
-merkle-whitelist generate examples/address-amounts.csv --mode address-amount -o airdrop.json
+merkle-builder generate examples/address-amounts.csv --mode address-amount -o airdrop.json
 
 # Amounts given as human-readable token amounts of an 18-decimal token
-merkle-whitelist generate examples/address-amounts.csv --mode address-amount --decimals 18 -o airdrop.json
+merkle-builder generate examples/address-amounts.csv --mode address-amount --decimals 18 -o airdrop.json
 
 # Only the root, reading from stdin
-cat examples/addresses.txt | merkle-whitelist generate --root-only
+cat examples/addresses.txt | merkle-builder generate --root-only
 ```
 
 ### `verify`
@@ -135,7 +135,7 @@ cat examples/addresses.txt | merkle-whitelist generate --root-only
 Checks a proof off-chain, exactly as the contract would.
 
 ```bash
-merkle-whitelist verify \
+merkle-builder verify \
   --root 0xc02e90f56c90f21a1f3d88e4640f52cafd80467679d516857369d8751b42b22e \
   --address 0x90F79bf6EB2c4f870365E785982E1f101E93b906 \
   --amount 1200 \
@@ -152,14 +152,14 @@ Exit codes: `0` valid, `1` invalid, `2` usage or input error.
 Pipe the list in and redirect the result out:
 
 ```bash
-docker run --rm -i merkle-whitelist generate --mode address-amount < examples/address-amounts.csv > airdrop.json
+docker run --rm -i merkle-builder generate --mode address-amount < examples/address-amounts.csv > airdrop.json
 ```
 
 Or mount a directory. The container runs as an unprivileged user, so pass your own user ID when
 it needs to write into the mounted directory:
 
 ```bash
-docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/data" merkle-whitelist generate examples/addresses.txt -o whitelist.json
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/data" merkle-builder generate examples/addresses.txt -o whitelist.json
 ```
 
 ## Input format
@@ -364,7 +364,7 @@ Returns `ok`. Used by the Docker health check.
 
 ## Configuration
 
-Options of `merkle-whitelist serve`, each with an environment variable:
+Options of `merkle-builder serve`, each with an environment variable:
 
 | Flag | Environment variable | Default | Description |
 | --- | --- | --- | --- |

@@ -1,6 +1,6 @@
 //! End-to-end checks against independently produced reference values.
 
-use merkle_whitelist::{
+use merkle_builder::{
     leaf_hash, parse_address, parse_amount, parse_hash, to_hex, verify, LeafEncoding, Mode,
     Options, Whitelist,
 };

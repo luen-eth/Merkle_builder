@@ -9,11 +9,11 @@ COPY web ./web
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/target \
     cargo build --release --locked \
-    && cp target/release/merkle-whitelist /usr/local/bin/merkle-whitelist
+    && cp target/release/merkle-builder /usr/local/bin/merkle-builder
 
 FROM alpine:3
 RUN adduser -D -u 10001 app
-COPY --from=builder /usr/local/bin/merkle-whitelist /usr/local/bin/merkle-whitelist
+COPY --from=builder /usr/local/bin/merkle-builder /usr/local/bin/merkle-builder
 USER app
 WORKDIR /data
 ENV HOST=0.0.0.0 \
@@ -21,5 +21,5 @@ ENV HOST=0.0.0.0 \
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
     CMD wget -qO- "http://127.0.0.1:${PORT}/healthz" || exit 1
-ENTRYPOINT ["merkle-whitelist"]
+ENTRYPOINT ["merkle-builder"]
 CMD ["serve"]

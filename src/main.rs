@@ -7,13 +7,13 @@ use std::process::ExitCode;
 use anyhow::{anyhow, bail, Context, Result};
 use clap::{Args, Parser, Subcommand};
 
-use merkle_whitelist::{
+use merkle_builder::{
     leaf_hash, parse_address, parse_amount, parse_hash, server, to_hex, verify, LeafEncoding, Mode,
     Options, Whitelist,
 };
 
 #[derive(Parser)]
-#[command(name = "merkle-whitelist", version, about)]
+#[command(name = "merkle-builder", version, about)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
