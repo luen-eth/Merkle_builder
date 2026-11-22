@@ -1,0 +1,9 @@
+services:
+  merkle-whitelist:
+    build: .
+    image: merkle-whitelist:latest
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      MAX_BODY_MB: "${MAX_BODY_MB:-64}"
+    restart: unless-stopped
