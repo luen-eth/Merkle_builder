@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Merkle Whitelist</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f7f9; --panel: #ffffff; --text: #16181d; --muted: #667085;
+    --border: #dfe3e8; --accent: #2f6feb; --accent-text: #ffffff;
+    --soft: #eef2f7; --danger: #c5303b; --danger-bg: #fdeeee; --ok: #1a7f4b;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115; --panel: #171a21; --text: #e7e9ee; --muted: #98a2b3;
+      --border: #2a2f3a; --accent: #5b8ff9; --accent-text: #0f1115;
+      --soft: #1f242e; --danger: #ff7b84; --danger-bg: #2a1719; --ok: #4ccb8a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 880px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  p.lead { color: var(--muted); margin: 0 0 24px; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px; margin-bottom: 16px;
+  }
+  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .mode {
+    text-align: left; padding: 12px 14px; border-radius: 10px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--panel); color: var(--text); font: inherit;
+  }
+  .mode strong { display: block; }
+  .mode span { color: var(--muted); font-size: 13px; }
+  .mode[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .field.grow { flex: 1 1 220px; }
+  label, .label { font-size: 13px; color: var(--muted); }
+  input[type="text"], input[type="number"], select, textarea {
+    font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; width: 100%;
+  }
+  textarea { font-family: var(--mono); font-size: 13px; min-height: 220px; resize: vertical; }
+  textarea.dragging { border-color: var(--accent); }
+  button.btn {
+    font: inherit; padding: 8px 14px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--soft); color: var(--text);
+  }
+  button.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+  button.btn:disabled { opacity: .6; cursor: default; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 0; }
+  .toolbar .spacer { flex: 1; }
+  .hint { color: var(--muted); font-size: 13px; }
+  code, .mono { font-family: var(--mono); font-size: 13px; }
+  .formula { background: var(--soft); border-radius: 8px; padding: 8px 10px; margin-top: 12px; overflow-wrap: anywhere; }
+  .error { background: var(--danger-bg); color: var(--danger); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; }
+  .error ul { margin: 6px 0 0; padding-left: 20px; }
+  .root { display: flex; gap: 8px; align-items: center; }
+  .root code { flex: 1; background: var(--soft); border-radius: 8px; padding: 10px; overflow-wrap: anywhere; }
+  .stats { display: flex; flex-wrap: wrap; gap: 24px; margin: 14px 0; }
+  .stats b { display: block; font-size: 18px; }
+  .lookup-result { margin-top: 12px; }
+  .lookup-result pre {
+    background: var(--soft); border-radius: 8px; padding: 10px; margin: 6px 0 0;
+    font-family: var(--mono); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .ok { color: var(--ok); } .bad { color: var(--danger); }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; }
+  td.mono { font-family: var(--mono); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Merkle Whitelist</h1>
+  <p class="lead">Generate a Merkle root and per-address proofs for EVM whitelists and airdrops.</p>
+
+  <section class="panel">
+    <div class="modes" role="group" aria-label="List mode">
+      <button type="button" class="mode" data-mode="address" aria-pressed="true">
+        <strong>Address list</strong><span>One address per line</span>
+      </button>
+      <button type="button" class="mode" data-mode="address-amount" aria-pressed="false">
+        <strong>Address + amount list</strong><span>One <code>address,amount</code> pair per line</span>
+      </button>
+    </div>
+
+    <div class="row">
+      <div class="field grow">
+        <label for="encoding">Leaf encoding</label>
+        <select id="encoding">
+          <option value="packed">Packed: keccak256(abi.encodePacked(...))</option>
+          <option value="double">Double hash: OpenZeppelin StandardMerkleTree leaf</option>
+        </select>
+      </div>
+      <div class="field" id="decimals-field" hidden>
+        <label for="decimals">Token decimals</label>
+        <input type="number" id="decimals" min="0" max="77" value="0" style="width: 130px">
+      </div>
+    </div>
+    <div class="hint" id="decimals-hint" hidden style="margin-top: 6px">
+      Use 0 if amounts are already in raw units (wei). Use e.g. 18 to enter human-readable amounts like 1.5.
+    </div>
+    <div class="formula mono" id="formula"></div>
+  </section>
+
+  <section class="panel">
+    <label for="input">List</label>
+    <textarea id="input" spellcheck="false" autocomplete="off"></textarea>
+    <div class="toolbar">
+      <button type="button" class="btn" id="load-file">Load file</button>
+      <button type="button" class="btn" id="load-sample">Load sample</button>
+      <button type="button" class="btn" id="clear">Clear</button>
+      <span class="hint" id="line-count"></span>
+      <span class="spacer"></span>
+      <button type="button" class="btn primary" id="generate">Generate</button>
+    </div>
+    <input type="file" id="file" accept=".txt,.csv,text/plain,text/csv" hidden>
+    <div class="hint" style="margin-top: 8px">
+      You can also drop a .txt or .csv file onto the box. Blank lines, lines starting with # and a CSV header are ignored.
+    </div>
+  </section>
+
+  <div class="error" id="error" role="alert" hidden></div>
+
+  <section class="panel" id="result" hidden>
+    <h2>Merkle root</h2>
+    <div class="root">
+      <code id="root"></code>
+      <button type="button" class="btn" id="copy-root">Copy</button>
+    </div>
+    <div class="stats">
+      <div><b id="stat-count"></b><span class="hint">entries</span></div>
+      <div><b id="stat-duplicates"></b><span class="hint">duplicates removed</span></div>
+      <div><b id="stat-depth"></b><span class="hint">max proof length</span></div>
+    </div>
+    <button type="button" class="btn primary" id="download">Download JSON</button>
+  </section>
+
+  <section class="panel" id="lookup" hidden>
+    <h2>Look up a proof</h2>
+    <div class="row">
+      <div class="field grow">
+        <label for="lookup-address">Address</label>
+        <input type="text" id="lookup-address" placeholder="0x..." spellcheck="false" autocomplete="off">
+      </div>
+      <button type="button" class="btn" id="lookup-button">Find</button>
+    </div>
+    <div class="lookup-result" id="lookup-result" hidden></div>
+  </section>
+
+  <section class="panel" id="preview" hidden>
+    <h2 id="preview-title">Entries</h2>
+    <div class="table-wrap"><table id="preview-table"></table></div>
+  </section>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  const PREVIEW_ROWS = 50;
+  const SAMPLES = {
+    'address': [
+      '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
+      '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+      '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
+    ].join('\n'),
+    'address-amount': [
+      '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266,100',
+      '0x70997970C51812dc3A010C7d01b50e0d17dc79C8,250',
+      '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC,75',
+    ].join('\n'),
+  };
+  const FORMULAS = {
+    'address': {
+      packed: 'leaf = keccak256(abi.encodePacked(account))',
+      double: 'leaf = keccak256(bytes.concat(keccak256(abi.encode(account))))',
+    },
+    'address-amount': {
+      packed: 'leaf = keccak256(abi.encodePacked(account, amount))',
+      double: 'leaf = keccak256(bytes.concat(keccak256(abi.encode(account, amount))))',
+    },
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const input = $('input');
+  let mode = 'address';
+  let resultText = null;
+  let result = null;
+  let index = null;
+
+  function setMode(next) {
+    mode = next;
+    document.querySelectorAll('.mode').forEach((button) => {
+      button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
+    });
+    const withAmount = mode === 'address-amount';
+    $('decimals-field').hidden = !withAmount;
+    $('decimals-hint').hidden = !withAmount;
+    input.placeholder = withAmount
+      ? '0xAbc...123,100\n0xDef...456,250'
+      : '0xAbc...123\n0xDef...456';
+    updateFormula();
+  }
+
+  function updateFormula() {
+    $('formula').textContent = FORMULAS[mode][$('encoding').value];
+  }
+
+  function updateLineCount() {
+    const lines = input.value.split('\n').filter((line) => line.trim() !== '').length;
+    $('line-count').textContent = lines === 0 ? '' : lines.toLocaleString('en-US') + (lines === 1 ? ' line' : ' lines');
+  }
+
+  function showError(message, details) {
+    const box = $('error');
+    box.textContent = '';
+    const title = document.createElement('strong');
+    title.textContent = message;
+    box.appendChild(title);
+    if (details && details.length) {
+      const list = document.createElement('ul');
+      details.forEach((detail) => {
+        const item = document.createElement('li');
+        item.textContent = 'Line ' + detail.line + ': ' + detail.message;
+        list.appendChild(item);
+      });
+      box.appendChild(list);
+    }
+    box.hidden = false;
+  }
+
+  function hideResults() {
+    ['result', 'lookup', 'preview'].forEach((id) => { $(id).hidden = true; });
+    $('lookup-result').hidden = true;
+  }
+
+  function readFile(file) {
+    if (!file) return;
+    file.text().then((text) => {
+      input.value = text;
+      updateLineCount();
+    });
+  }
+
+  async function generate() {
+    const button = $('generate');
+    $('error').hidden = true;
+
+    if (input.value.trim() === '') {
+      hideResults();
+      showError('The list is empty.');
+      return;
+    }
+
+    const decimals = mode === 'address-amount' ? Number($('decimals').value || 0) : 0;
+    if (!Number.isInteger(decimals) || decimals < 0 || decimals > 77) {
+      showError('Token decimals must be a whole number between 0 and 77.');
+      return;
+    }
+
+    button.disabled = true;
+    button.textContent = 'Generating...';
+    try {
+      const response = await fetch('api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode, encoding: $('encoding').value, decimals, input: input.value }),
+      });
+      const text = await response.text();
+
+      if (!response.ok) {
+        hideResults();
+        let payload = null;
+        try { payload = JSON.parse(text); } catch (_) { /* plain-text error */ }
+        if (payload && payload.error) {
+          const message = payload.error.charAt(0).toUpperCase() + payload.error.slice(1) + '.';
+          showError(message, payload.details);
+        } else if (response.status === 413) {
+          showError('The list is too large for this server. Use the CLI or raise MAX_BODY_MB.');
+        } else {
+          showError('Request failed (' + response.status + '). ' + text.slice(0, 200));
+        }
+        return;
+      }
+
+      resultText = text;
+      result = JSON.parse(text);
+      index = new Map(result.entries.map((entry) => [entry.address.toLowerCase(), entry]));
+      renderResult();
+    } catch (error) {
+      hideResults();
+      showError('Could not reach the server. ' + error.message);
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Generate';
+    }
+  }
+
+  function renderResult() {
+    $('root').textContent = result.root;
+    $('stat-count').textContent = result.count.toLocaleString('en-US');
+    $('stat-duplicates').textContent = result.duplicatesRemoved.toLocaleString('en-US');
+    $('stat-depth').textContent = result.entries.reduce((max, entry) => Math.max(max, entry.proof.length), 0);
+
+    const withAmount = result.mode === 'address-amount';
+    const table = $('preview-table');
+    table.textContent = '';
+    const head = table.insertRow();
+    ['#', 'Address'].concat(withAmount ? ['Amount (raw units)'] : [], ['Leaf']).forEach((title) => {
+      const cell = document.createElement('th');
+      cell.textContent = title;
+      head.appendChild(cell);
+    });
+    result.entries.slice(0, PREVIEW_ROWS).forEach((entry, position) => {
+      const row = table.insertRow();
+      const values = [String(position + 1), entry.address].concat(withAmount ? [entry.amount] : [], [entry.leaf]);
+      values.forEach((value, column) => {
+        const cell = row.insertCell();
+        cell.textContent = value;
+        if (column > 0) cell.className = 'mono';
+      });
+    });
+    $('preview-title').textContent = result.count > PREVIEW_ROWS
+      ? 'Entries (first ' + PREVIEW_ROWS + ' of ' + result.count.toLocaleString('en-US') + ')'
+      : 'Entries';
+
+    $('lookup-result').hidden = true;
+    ['result', 'lookup', 'preview'].forEach((id) => { $(id).hidden = false; });
+    $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function lookup() {
+    const box = $('lookup-result');
+    let query = $('lookup-address').value.trim().toLowerCase();
+    if (query === '') return;
+    if (!query.startsWith('0x')) query = '0x' + query;
+
+    const entry = index.get(query);
+    box.textContent = '';
+    box.hidden = false;
+
+    const status = document.createElement('strong');
+    if (!entry) {
+      status.className = 'bad';
+      status.textContent = 'This address is not in the list.';
+      box.appendChild(status);
+      return;
+    }
+    status.className = 'ok';
+    status.textContent = 'Found ' + entry.address;
+    box.appendChild(status);
+
+    const addBlock = (title, value) => {
+      const label = document.createElement('div');
+      label.className = 'label';
+      label.style.marginTop = '10px';
+      label.textContent = title;
+      const pre = document.createElement('pre');
+      pre.textContent = value;
+      box.appendChild(label);
+      box.appendChild(pre);
+    };
+    if (entry.amount !== undefined) addBlock('Amount (raw units)', entry.amount);
+    addBlock('Leaf', entry.leaf);
+    const proofJson = JSON.stringify(entry.proof);
+    addBlock('Proof (' + entry.proof.length + (entry.proof.length === 1 ? ' hash)' : ' hashes)'), proofJson);
+
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.className = 'btn';
+    copy.style.marginTop = '10px';
+    copy.textContent = 'Copy proof';
+    copy.addEventListener('click', () => copyText(proofJson, copy, 'Copy proof'));
+    box.appendChild(copy);
+  }
+
+  function copyText(text, button, label) {
+    const done = () => {
+      button.textContent = 'Copied';
+      setTimeout(() => { button.textContent = label; }, 1200);
+    };
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(done);
+      return;
+    }
+    // Fallback for plain-HTTP deployments, where the Clipboard API is unavailable.
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    try { document.execCommand('copy'); done(); } catch (_) { /* ignore */ }
+    area.remove();
+  }
+
+  function download() {
+    const url = URL.createObjectURL(new Blob([resultText], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'merkle-' + result.mode + '.json';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  document.querySelectorAll('.mode').forEach((button) => {
+    button.addEventListener('click', () => setMode(button.dataset.mode));
+  });
+  $('encoding').addEventListener('change', updateFormula);
+  input.addEventListener('input', updateLineCount);
+  $('load-file').addEventListener('click', () => $('file').click());
+  $('file').addEventListener('change', (event) => { readFile(event.target.files[0]); event.target.value = ''; });
+  $('load-sample').addEventListener('click', () => { input.value = SAMPLES[mode]; updateLineCount(); });
+  $('clear').addEventListener('click', () => { input.value = ''; updateLineCount(); $('error').hidden = true; hideResults(); });
+  $('generate').addEventListener('click', generate);
+  $('copy-root').addEventListener('click', () => copyText(result.root, $('copy-root'), 'Copy'));
+  $('download').addEventListener('click', download);
+  $('lookup-button').addEventListener('click', lookup);
+  $('lookup-address').addEventListener('keydown', (event) => { if (event.key === 'Enter') lookup(); });
+
+  input.addEventListener('dragover', (event) => { event.preventDefault(); input.classList.add('dragging'); });
+  input.addEventListener('dragleave', () => input.classList.remove('dragging'));
+  input.addEventListener('drop', (event) => {
+    input.classList.remove('dragging');
+    if (event.dataTransfer.files.length) {
+      event.preventDefault();
+      readFile(event.dataTransfer.files[0]);
+    }
+  });
+
+  setMode('address');
+  updateLineCount();
+})();
+</script>
+</body>
+</html>
